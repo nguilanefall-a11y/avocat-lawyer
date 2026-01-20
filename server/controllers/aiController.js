@@ -22,25 +22,33 @@ exports.chat = async (req, res) => {
         const recentDocs = docsRes.rows.map(d => ({ id: d.id, title: d.title, data: d.source_data }));
 
         // 4. Prepare Context
-        const unreadEmails = await gmailController.fetchUnreadEmails();
-        const emailContext = unreadEmails.length > 0 ? JSON.stringify(unreadEmails, null, 2) : "Aucun email.";
+        let emailContext = "Service Gmail indisponible.";
+        try {
+            const unreadEmails = await gmailController.fetchUnreadEmails();
+            emailContext = unreadEmails.length > 0 ? JSON.stringify(unreadEmails, null, 2) : "Aucun email non lu.";
+        } catch (e) {
+            console.error("Gmail Fetch Error (non-blocking):", e.message);
+        }
 
         const context = `
 CONTEXTE JURIDIQUE:
 Date: ${new Date().toLocaleDateString('fr-FR')}
 DERNIERS DOCUMENTS GÉNÉRÉS PAR ATLAS (MODIFIABLES):
 ${JSON.stringify(recentDocs, null, 2)}
+EMAILS RECENTS (Lectures Seule): ${emailContext.substring(0, 2000)}
 
 INSTRUCTIONS (ATLAS):
-1. GÉNÉRATION : Si on demande une facture, utilisez :::JSON_COMMAND { action: "GENERATE_PDF", ... } :::
-2. MODIFICATION (INTERNE) : Si on demande de modifier un des documents ci-dessus (ex: "Change le montant de la dernière facture à 600€"):
-   - Retrouvez le document dans la liste ci-dessus par son contenu/titre.
-   - Prenez ses données JSON ("data").
-   - Modifiez les valeurs demandées.
-   - GÉNÉREZ une nouvelle commande GENERATE_PDF avec les NOUVELLES données (et le même type).
-   - Précisez dans le message: "J'ai régénéré le document..."
+Vous êtes "Atlas", l'Assistant Juridique Intelligent du Cabinet.
+VOTRE RÔLE :
+1. DISCUTER : Vous êtes un expert juridique. Répondez aux questions, donnez des conseils, ou discutez simplement. Soyez professionnel mais chaleureux.
+2. AGIR : Si on vous demande une action spécifique (Facture, Modif), utilisez les commandes JSON.
 
-3. MODIFICATION (EXTERNE/UPLOAD) : Si un texte est fourni (upload), utilisez la méthode de réécriture (GENERATE_PDF type="generic").
+COMMANDES :
+1. GÉNÉRATION : :::JSON_COMMAND { action: "GENERATE_PDF", ... } :::
+2. MODIFICATION (INTERNE) : Pour modifier un document existant, réutilisez son JSON, modifiez-le, et relancez GENERATE_PDF.
+3. MODIFICATION (EXTERNE) : Si via upload, utilisez la méthode de réécriture.
+
+Si l'utilisateur dit juste "Bonjour", répondez poliment sans JSON.
 `;
 
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -90,5 +98,21 @@ INSTRUCTIONS (ATLAS):
     } catch (error) {
         console.error("AI Error:", error);
         res.status(500).json({ text: "Erreur traitement." });
+    }
+};
+
+exports.getHistory = async (req, res) => {
+    try {
+        const result = await db.query('SELECT id, role, content, created_at FROM messages ORDER BY id ASC');
+        const messages = result.rows.map(r => ({
+            id: r.id,
+            sender: r.role === 'user' ? 'user' : 'ai',
+            text: r.content,
+            timestamp: r.created_at
+        }));
+        res.json(messages);
+    } catch (e) {
+        console.error("History Error", e);
+        res.json([]);
     }
 };
