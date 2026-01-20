@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 40px; color: #333; }
+    .header { display: flex; justify-content: space-between; margin-bottom: 50px; border-bottom: 2px solid #D4AF37; padding-bottom: 20px; }
+    .logo { font-size: 24px; font-weight: bold; font-family: 'Georgia', serif; color: #000; }
+    .logo span { color: #D4AF37; }
+    .invoice-title { font-size: 32px; font-weight: bold; text-transform: uppercase; color: #555; text-align: right; }
+    .meta { display: flex; justify-content: space-between; margin-bottom: 40px; }
+    .client-info h3 { border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px; color: #D4AF37; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th { text-align: left; background: #f9f9f9; padding: 10px; border-bottom: 2px solid #ddd; font-weight: bold; text-transform: uppercase; font-size: 12px; }
+    td { padding: 12px 10px; border-bottom: 1px solid #eee; }
+    .total-section { margin-top: 40px; text-align: right; }
+    .total-row { font-size: 14px; margin-bottom: 5px; }
+    .final-total { font-size: 20px; font-weight: bold; color: #000; margin-top: 10px; }
+    .footer { position: fixed; bottom: 30px; left: 40px; right: 40px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">CABINET <span>ATLAS</span></div>
+    <div class="invoice-title">FACTURE</div>
+  </div>
+
+  <div class="meta">
+    <div class="firm-info">
+      <strong>Cabinet d'Avocats Atlas</strong><br>
+      123 Avenue de la République<br>
+      75011 Paris<br>
+      contact@cabinet-atlas.com
+    </div>
+    <div class="client-info">
+      <h3>À l'attention de</h3>
+      <strong>{{client.name}}</strong><br>
+      {{client.address}}<br>
+      {{client.email}}
+    </div>
+  </div>
+
+  <div style="margin-bottom: 30px;">
+    <strong>Facture N° :</strong> {{invoice.number}}<br>
+    <strong>Date :</strong> {{invoice.date}}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th style="text-align: right;">Quantité</th>
+        <th style="text-align: right;">Prix Unitaire</th>
+        <th style="text-align: right;">Total HT</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each items}}
+      <tr>
+        <td>{{description}}</td>
+        <td style="text-align: right;">{{quantity}}</td>
+        <td style="text-align: right;">{{unitPrice}} €</td>
+        <td style="text-align: right;">{{total}} €</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <div class="total-section">
+    <div class="total-row">Total HT : {{totals.ht}} €</div>
+    <div class="total-row">TVA (20%) : {{totals.tva}} €</div>
+    <div class="final-total">NET À PAYER : {{totals.ttc}} €</div>
+  </div>
+
+  <div class="footer">
+    Cabinet Atlas - Avocat au Barreau de Paris - SIRET 123 456 789 00012<br>
+    Membre d'une association agréée, le règlement par chèque est accepté. En cas de retard de paiement, une pénalité de 3 fois le taux légal sera appliquée.
+  </div>
+</body>
+</html>

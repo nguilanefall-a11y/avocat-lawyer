@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            font-family: 'Times New Roman', serif;
+            padding: 50px;
+            color: #000;
+            line-height: 1.6;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        .content {
+            font-size: 14px;
+            text-align: justify;
+            white-space: pre-wrap;
+        }
+
+        .footer {
+            margin-top: 50px;
+            text-align: right;
+            font-weight: bold;
+        }
+
+        .signature-line {
+            margin-top: 60px;
+            border-top: 1px solid #000;
+            width: 200px;
+            margin-left: auto;
+            text-align: center;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="title">{{title}}</div>
+    </div>
+
+    <div class="content">
+        {{content}}
+    </div>
+
+    <div class="footer">
+        <div class="signature-line">
+            {{signature}}
+        </div>
+    </div>
+</body>
+
+</html>

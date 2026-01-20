@@ -9,6 +9,9 @@ const invoiceRoutes = require('./routes/invoices');
 const documentRoutes = require('./routes/documents');
 const messageRoutes = require('./routes/messages');
 const calendarRoutes = require('./routes/calendar');
+const aiRoutes = require('./routes/ai');
+const authRoutes = require('./routes/auth');
+const uploadRoutes = require('./routes/upload');
 
 // Middleware
 app.use(cors());
@@ -21,6 +24,9 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/upload', uploadRoutes);
 app.post('/api/reset', resetController.resetData);
 
 app.get('/', (req, res) => {

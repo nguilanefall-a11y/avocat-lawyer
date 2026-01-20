@@ -19,11 +19,14 @@ function App() {
 
   // SIDE CHAT STATE
   const [showChat, setShowChat] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { id: 1, sender: 'ai', text: 'Bonjour Maître. Je suis votre Assistant Juridique. Je peux rédiger des actes, rechercher des jurisprudences ou analyser des pièces pour vous.' }
   ]);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [fileContext, setFileContext] = useState('');
 
   const loadData = () => {
     fetch('http://localhost:3000/api/invoices').then(res => res.json()).then(setInvoices);
@@ -32,7 +35,18 @@ function App() {
     fetch('http://localhost:3000/api/calendar').then(res => res.json()).then(setEvents);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    fetch('http://localhost:3000/api/auth/status')
+      .then(res => res.json())
+      .then(d => setGmailConnected(d.connected))
+      .catch(e => console.error("Auth check", e));
+
+    fetch('http://localhost:3000/api/ai/history')
+      .then(res => res.json())
+      .then(hist => { if (hist && hist.length > 0) setChatMessages(hist); })
+      .catch(e => console.error("History load error", e));
+  }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages, showChat]);
 
   // --- AI LOGIC ---
@@ -50,20 +64,63 @@ function App() {
     return "Contenu généré...";
   };
 
-  const handleChatSubmit = (e) => {
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setChatMessages(prev => [...prev, { id: Date.now(), sender: 'user', text: `📎 Analyse de document : ${file.name}` }]);
+    setChatMessages(prev => [...prev, { id: Date.now() + 1, sender: 'ai', text: "J'analyse le document..." }]);
+
+    try {
+      const res = await fetch('http://localhost:3000/api/upload/analyze', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (data.success) {
+        setFileContext(data.text);
+        if (data.client) {
+          setPreview({ show: true, type: 'NEW_CLIENT', id: Date.now(), content: 'Vérifiez les données du client détecté.', meta: data.client });
+          setChatMessages(prev => [...prev, { id: Date.now() + 2, sender: 'ai', text: "J'ai extrait le texte et un client. Que voulez-vous faire ?" }]);
+        } else {
+          setChatMessages(prev => [...prev, { id: Date.now() + 2, sender: 'ai', text: "Document lu. Instructions ?" }]);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setChatMessages(prev => [...prev, { id: Date.now() + 2, sender: 'ai', text: "Erreur lors de l'analyse." }]);
+    }
+  };
+
+  const handleChatSubmit = async (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (!chatInput.trim()) return;
+
       const userMsg = { id: Date.now(), sender: 'user', text: chatInput };
       setChatMessages(prev => [...prev, userMsg]);
       setChatInput('');
 
-      // MOCK AI RESPONSE
-      setTimeout(() => {
-        const aiMsg = { id: Date.now() + 1, sender: 'ai', text: "Entendu Maître. Je génère le document demandé..." };
-        if (userMsg.text.toLowerCase().includes('concl')) aiMsg.text = "Voici une ébauche de conclusions pour le dossier Martin:\n\nPLAISE AU TRIBUNAL,\nAttendu que...";
+      try {
+        const response = await fetch('http://localhost:3000/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: chatInput,
+            context_text: fileContext // SEND CONTEXT
+          })
+        });
+
+        const data = await response.json();
+        const aiMsg = { id: Date.now() + 1, sender: 'ai', text: data.text };
         setChatMessages(prev => [...prev, aiMsg]);
-      }, 1000);
+
+      } catch (error) {
+        console.error("AI connection failed", error);
+        const aiMsg = { id: Date.now() + 1, sender: 'ai', text: "Erreur de connexion avec Atlas." };
+        setChatMessages(prev => [...prev, aiMsg]);
+      }
     }
   };
 
@@ -78,7 +135,7 @@ function App() {
   };
 
   const confirmAction = () => {
-    const { type, id } = preview;
+    const { type, id, meta } = preview;
     if (type === 'REMIND') {
       fetch('http://localhost:3000/api/invoices/reminders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
         .then(res => res.json()).then(d => { if (d.success) setInvoices(p => p.map(i => i.id === id ? { ...i, remindersSent: i.remindersSent + 1 } : i)) });
@@ -86,6 +143,15 @@ function App() {
     if (type === 'REPLY') {
       fetch('http://localhost:3000/api/messages/reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, replyType: 'ACK' }) })
         .then(() => setMessages(p => p.filter(m => m.id !== id)));
+    }
+    if (type === 'NEW_CLIENT') {
+      fetch('http://localhost:3000/api/upload/create-client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta) })
+        .then(res => res.json())
+        .then(d => {
+          if (d.success) {
+            setChatMessages(prev => [...prev, { id: Date.now(), sender: 'ai', text: `Client ${d.client.name} créé avec succès !` }]);
+          }
+        });
     }
     setPreview({ show: false, type: '', id: null, content: '', meta: null });
   };
@@ -145,11 +211,32 @@ function App() {
               <div style={{ fontWeight: 600 }}>Brouillon Automatique</div>
             </div>
             <div className="preview-content">
-              <textarea
-                className="preview-textarea"
-                value={preview.content}
-                onChange={(e) => setPreview({ ...preview, content: e.target.value })}
-              />
+              {preview.type === 'NEW_CLIENT' ? (
+                <div style={{ padding: '1rem', background: 'var(--onyx-light)', borderRadius: '8px' }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Nom</label>
+                    <input className="chat-input" value={preview.meta?.name || ''} onChange={e => setPreview({ ...preview, meta: { ...preview.meta, name: e.target.value } })} style={{ background: 'white', color: 'black', border: '1px solid #ddd' }} />
+                  </div>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Email</label>
+                    <input className="chat-input" value={preview.meta?.email || ''} onChange={e => setPreview({ ...preview, meta: { ...preview.meta, email: e.target.value } })} style={{ background: 'white', color: 'black', border: '1px solid #ddd' }} />
+                  </div>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Téléphone</label>
+                    <input className="chat-input" value={preview.meta?.phone || ''} onChange={e => setPreview({ ...preview, meta: { ...preview.meta, phone: e.target.value } })} style={{ background: 'white', color: 'black', border: '1px solid #ddd' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Adresse</label>
+                    <input className="chat-input" value={preview.meta?.address || ''} onChange={e => setPreview({ ...preview, meta: { ...preview.meta, address: e.target.value } })} style={{ background: 'white', color: 'black', border: '1px solid #ddd' }} />
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  className="preview-textarea"
+                  value={preview.content}
+                  onChange={(e) => setPreview({ ...preview, content: e.target.value })}
+                />
+              )}
             </div>
             <div className="preview-actions">
               <button onClick={() => setPreview({ show: false, type: '', content: '' })} className="z-btn z-btn-ghost" style={{ color: 'var(--text-primary)', borderColor: 'var(--text-muted)' }}>Annuler</button>
@@ -169,6 +256,11 @@ function App() {
               <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>IA Juridique</div>
             </div>
           </div>
+          {!gmailConnected && (
+            <a href="http://localhost:3000/api/auth/google" className="z-btn" style={{ fontSize: '0.7rem', padding: '0.3rem 0.6rem', background: '#DB4437', color: 'white', border: 'none', marginLeft: 'auto', marginRight: '1rem', textDecoration: 'none' }}>
+              G Connecter
+            </a>
+          )}
           <button onClick={() => setShowChat(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-muted)' }}>×</button>
         </div>
 
@@ -224,9 +316,10 @@ function App() {
             onKeyDown={handleChatSubmit}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.8rem', alignItems: 'center' }}>
-            <button style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+            <button onClick={() => fileInputRef.current?.click()} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
               📎 Joindre une pièce
             </button>
+            <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf" />
             <button onClick={() => handleChatSubmit({ key: 'Enter', preventDefault: () => { } })} className="z-btn" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}>Envoyer ↵</button>
           </div>
         </div>
